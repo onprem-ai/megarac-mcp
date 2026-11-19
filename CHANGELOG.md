@@ -2,6 +2,16 @@
 
 ## 0.2.0 – unreleased
 
+- **Fix: typed text was lost on BMCs in HID power-save mode** (Gigabyte G494-ZB4, AMI MegaRAC
+  13.70.15). The BMC attaches its virtual keyboard only when the first KVM session starts; keys
+  sent before the host detected it vanished without an error. The KVM session now waits
+  (`ASUS_IPMI_HID_WAIT`, default 15 s) before the first input of such a session.
+- **`call` and `run` use a background process per card** that keeps the KVM session open between
+  invocations (started on demand, exits after 10 idle minutes; `daemon <host> status|stop`,
+  `--no-daemon`, `ASUS_IPMI_DAEMON=0`). Later calls take about a second, not a new session each.
+- **KVM connect is retried** (3 tries) when the card does not complete the websocket upgrade,
+  which it does for some seconds after a session closed.
+
 Fixes and features from a fleet session (four cards, firmware 1.1.35 → 1.3.13).
 
 - **Removed the `ASUS_IPMI_ALLOW_POWER` / `_MEDIA` / `_FIRMWARE` flags.** All tools (power, boot

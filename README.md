@@ -107,7 +107,8 @@ Reports from other boards and firmware versions are very welcome. Please open an
 | | |
 |---|---|
 | Tested | ASUS IPMI Expansion Card-SI (90MC0AH0-MVUBY1), BMC firmware **1.3.13**, on a ProArt X870E-CREATOR WIFI |
-| Should work | Other ASUS boards from the [compatible model list](https://dlcdnets.asus.com/pub/ASUS/mb/Add-on_card/IPMI_EXPANSION_CARD/Compatible_Model_List.pdf); likely other AMI MegaRAC BMCs with ASPEED AST2500/2600 and the H5Viewer (untested) |
+| Should work | Other ASUS boards from the [compatible model list](https://dlcdnets.asus.com/pub/ASUS/mb/Add-on_card/IPMI_EXPANSION_CARD/Compatible_Model_List.pdf); likely other AMI MegaRAC BMCs with ASPEED AST2500/2600 and the H5Viewer |
+| Reported working | Gigabyte G494-ZB4-AAP2 (board MZB3-G41), AMI MegaRAC firmware 13.70.15: screenshots, keyboard, `bmc_reset`. Redfish power there has no `GracefulRestart` |
 
 ## Install
 
@@ -184,6 +185,9 @@ the card's web UI first, then run `login`.
 | `ASUS_IPMI_PASSWORD` | – | Only for unattended use (CI, scripts). Leave it unset and use `login` instead |
 | `ASUS_IPMI_SESSION_FILE` | `~/.local/state/asus-ipmi-mcp/<host>.json` | Where `login` stores the session tokens |
 | `ASUS_IPMI_SCREENSHOT_MAX` | `1024` | Long side of returned screenshots (pixels) |
+| `ASUS_IPMI_HID_WAIT` | `15` | Seconds to wait before the first input when the BMC attaches its keyboard only at session start ([HID power-save mode](#things-to-know)) |
+| `ASUS_IPMI_DAEMON` | on | `0`: `call` / `run` do not use the [background process](#command-line-no-mcp-client) |
+| `ASUS_IPMI_DAEMON_IDLE` | `10` | Minutes without a call after which the background process exits |
 
 ## Tools
 
@@ -263,6 +267,21 @@ connection, `screen_id`s and the firmware `confirm_token` carry over. Args can u
 ]
 ```
 
+**Background process.** With `login` tokens, `call` and `run` hand their steps to a background
+process per card. It is started on demand, keeps the KVM session open between invocations and
+exits after 10 minutes without a call. So a second `call` answers in about a second, a `screen_id`
+from one `call` is valid in the next, and the keyboard wait of HID power-save mode is paid once.
+While it runs it holds KVM control (see below).
+
+```bash
+asus-ipmi-mcp daemon <host> status     # running?
+asus-ipmi-mcp daemon <host> stop       # end it now, free the KVM session
+asus-ipmi-mcp call <host> screenshot --no-daemon   # everything in this process, as before
+```
+
+Its log is `~/.local/state/asus-ipmi-mcp/<host>.daemon.log`; tool logs (KVM connect, waits) go
+there, not to the `call`'s stderr. With `ASUS_IPMI_PASSWORD` set there is no background process.
+
 stdout gets one JSON line per step (`{step, tool, ok, result, images}`), images go to files (path
 printed, never base64), and logs go to stderr. Exit code 1 if a step failed (later steps are skipped
 unless `--keep-going`), 2 on usage errors.
@@ -280,6 +299,12 @@ unless `--keep-going`), 2 on usage errors.
 
 ## Things to know
 
+- **HID power-save mode: typed text got lost.** Some BMCs (seen on a Gigabyte G494-ZB4, AMI
+  MegaRAC 13.70.15) attach their virtual keyboard and mouse to the host only when the first KVM
+  session starts. The host needs several seconds to detect them, and input sent earlier is lost
+  without an error (the host's kernel log shows `usb ...: device not accepting address, error -71`
+  meanwhile, which is harmless). The tools detect this mode and wait `ASUS_IPMI_HID_WAIT` seconds
+  before the first input of such a session; `kvm_status` shows `hid_power_save`.
 - **One controlling KVM session per card.** Using the tools takes control from an open browser
   viewer (the viewer gets a "Permission Requested" prompt and loses control after ~30 s). If the
   viewer denies or blocks the request, the tools say so: close the viewer and retry.

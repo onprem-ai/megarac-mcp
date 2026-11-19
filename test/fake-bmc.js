@@ -13,6 +13,7 @@ export async function startFakeBmc(opts = {}) {
     calls: [],
     deleted: [],
     kvm: opts.kvm || null,          // (ws, socket) => void : KVM behaviour
+    powerSave: false,               // h5viewercfg power_save_mode
     n: 0,
     ...opts,
   };
@@ -57,7 +58,7 @@ export async function startFakeBmc(opts = {}) {
         if (url === '/api/maintenance/reset') { json(res, 200, {}); setTimeout(restart, 20); return; }
         if (url === '/api/Information') return json(res, 200, { FWVersion: st.version, FWDate: 'x', FWModels: [{ Model: 'KOMMANDO' }] });
         if (url === '/api/chassis-status') return json(res, 200, { power_status: 1 });
-        if (url === '/api/settings/media/h5viewercfg') return json(res, 200, { kvm_service_status: 1, token: 't', session: 's', client_ip: '1.2.3.4', server_ip: '127.0.0.1' });
+        if (url === '/api/settings/media/h5viewercfg') return json(res, 200, { kvm_service_status: 1, token: 't', session: 's', client_ip: '1.2.3.4', server_ip: '127.0.0.1', power_save_mode: st.powerSave ? 1 : 0 });
         if (url === '/api/settings/service-sessions') return json(res, 200, []);
         return json(res, 200, {});
       }
