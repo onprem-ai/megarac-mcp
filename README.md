@@ -1,17 +1,24 @@
-# asus-ipmi-mcp
+# megarac-mcp
 
 Give your AI agent hands and eyes on a physical machine. This [MCP](https://modelcontextprotocol.io)
-server connects to an **ASUS IPMI Expansion Card** and lets an agent (Claude Code, Cursor, Claude
+server connects to a server's **AMI MegaRAC BMC** (ASUS IPMI Expansion Card, Gigabyte server
+boards, and likely others on the ASPEED AST2600) and lets an agent (Claude Code, Cursor, Claude
 Desktop, …) see the machine's screen, move the mouse, type, press keys, read sensors, control power
 and update the card's firmware — exactly what you'd do in the card's web console, but as tools.
 No browser, no Java, no VNC.
 
+> [!NOTE]
+> **Renamed from `asus-ipmi-mcp`.** The KVM protocol is AMI MegaRAC's, not ASUS's, and the tool
+> works on other boards with that firmware. Old setups keep working: the `asus-ipmi-mcp` command,
+> the `ASUS_IPMI_*` variables, stored login tokens and the old GitHub URL (redirected).
+> The firmware update tools remain for the ASUS IPMI Expansion Card only.
+
 ```
-agent ──MCP (stdio)──> asus-ipmi-mcp ──HTTPS/WebSocket──> IPMI card (AST2600) ──USB keyboard/mouse + video──> host
+agent ──MCP (stdio)──> megarac-mcp ──HTTPS/WebSocket──> IPMI card (AST2600) ──USB keyboard/mouse + video──> host
 ```
 
 > [!IMPORTANT]
-> **Unofficial project.** asus-ipmi-mcp is an independent community project. It is **not affiliated
+> **Unofficial project.** megarac-mcp is an independent community project. It is **not affiliated
 > with, endorsed by, or supported by ASUSTeK Computer Inc. or American Megatrends (AMI)**. "ASUS",
 > "AMI" and "MegaRAC" are trademarks of their respective owners and are used only to describe
 > compatible hardware. It talks to the card through the same interfaces its own web console uses,
@@ -24,8 +31,8 @@ agent ──MCP (stdio)──> asus-ipmi-mcp ──HTTPS/WebSocket──> IPMI c
 > your shell history and the logs never see the password.
 >
 > ```bash
-> npx -y github:onprem-ai/asus-ipmi-mcp login <card address> --user admin
-> claude mcp add asus-ipmi -e ASUS_IPMI_HOST=<card address> -- npx -y github:onprem-ai/asus-ipmi-mcp
+> npx -y github:onprem-ai/megarac-mcp login <card address> --user admin
+> claude mcp add megarac -e MEGARAC_HOST=<card address> -- npx -y github:onprem-ai/megarac-mcp
 > ```
 >
 > Details: [Login: no password in the config](#login-no-password-in-the-config).
@@ -117,7 +124,7 @@ Requires Node.js ≥ 22.19 on the machine running the agent, and network access 
 Run straight from GitHub:
 
 ```bash
-npx -y github:onprem-ai/asus-ipmi-mcp
+npx -y github:onprem-ai/megarac-mcp
 ```
 
 Setup is always two steps: **1. `login` once in a terminal** (asks for the password, stores only
@@ -127,8 +134,8 @@ session tokens, [see below](#login-no-password-in-the-config)), **2. add the ser
 
 
 ```bash
-npx -y github:onprem-ai/asus-ipmi-mcp login <card address> --user admin
-claude mcp add asus-ipmi -e ASUS_IPMI_HOST=<card address> -- npx -y github:onprem-ai/asus-ipmi-mcp
+npx -y github:onprem-ai/megarac-mcp login <card address> --user admin
+claude mcp add megarac -e MEGARAC_HOST=<card address> -- npx -y github:onprem-ai/megarac-mcp
 ```
 
 ### Generic MCP config (Claude Desktop, Cursor, …)
@@ -138,9 +145,9 @@ claude mcp add asus-ipmi -e ASUS_IPMI_HOST=<card address> -- npx -y github:onpre
   "mcpServers": {
     "asus-ipmi": {
       "command": "npx",
-      "args": ["-y", "github:onprem-ai/asus-ipmi-mcp"],
+      "args": ["-y", "github:onprem-ai/megarac-mcp"],
       "env": {
-        "ASUS_IPMI_HOST": "<card address>"
+        "MEGARAC_HOST": "<card address>"
       }
     }
   }
@@ -155,14 +162,14 @@ add one entry per card with different names, and run `login` once per card.
 This is the recommended and safe way to use the server.
 
 ```bash
-npx -y github:onprem-ai/asus-ipmi-mcp login <card address> --user admin   # asks for the password, hidden
-npx -y github:onprem-ai/asus-ipmi-mcp logout <card address>               # ends the sessions on the card
+npx -y github:onprem-ai/megarac-mcp login <card address> --user admin   # asks for the password, hidden
+npx -y github:onprem-ai/megarac-mcp logout <card address>               # ends the sessions on the card
 ```
 
 `login` asks for the password once at a hidden terminal prompt, opens a web and a Redfish
 session on the card, and stores **only the session tokens** in a file readable by you
-alone (mode 600). Then configure the MCP server with `ASUS_IPMI_HOST` and **no**
-`ASUS_IPMI_PASSWORD`: it runs on the tokens. The password never appears in the MCP
+alone (mode 600). Then configure the MCP server with `MEGARAC_HOST` and **no**
+`MEGARAC_PASSWORD`: it runs on the tokens. The password never appears in the MCP
 config, the environment, the command line, shell history or logs, and the agent never
 sees it. The sessions expire on the card after inactivity; then run `login` again. A running
 server picks up the new tokens by itself, so there is no need to restart it or the agent.
@@ -180,14 +187,14 @@ the card's web UI first, then run `login`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ASUS_IPMI_HOST` | – (required) | Card IP / hostname |
-| `ASUS_IPMI_USER` | `admin` | Card user (needs KVM privilege) |
-| `ASUS_IPMI_PASSWORD` | – | Only for unattended use (CI, scripts). Leave it unset and use `login` instead |
-| `ASUS_IPMI_SESSION_FILE` | `~/.local/state/asus-ipmi-mcp/<host>.json` | Where `login` stores the session tokens |
-| `ASUS_IPMI_SCREENSHOT_MAX` | `1024` | Long side of returned screenshots (pixels) |
-| `ASUS_IPMI_HID_WAIT` | `15` | Seconds to wait before the first input when the BMC attaches its keyboard only at session start ([HID power-save mode](#things-to-know)) |
-| `ASUS_IPMI_DAEMON` | on | `0`: `call` / `run` do not use the [background process](#command-line-no-mcp-client) |
-| `ASUS_IPMI_DAEMON_IDLE` | `10` | Minutes without a call after which the background process exits |
+| `MEGARAC_HOST` | – (required) | Card IP / hostname |
+| `MEGARAC_USER` | `admin` | Card user (needs KVM privilege) |
+| `MEGARAC_PASSWORD` | – | Only for unattended use (CI, scripts). Leave it unset and use `login` instead |
+| `MEGARAC_SESSION_FILE` | `~/.local/state/megarac-mcp/<host>.json` | Where `login` stores the session tokens |
+| `MEGARAC_SCREENSHOT_MAX` | `1024` | Long side of returned screenshots (pixels) |
+| `MEGARAC_HID_WAIT` | `15` | Seconds to wait before the first input when the BMC attaches its keyboard only at session start ([HID power-save mode](#things-to-know)) |
+| `MEGARAC_DAEMON` | on | `0`: `call` / `run` do not use the [background process](#command-line-no-mcp-client) |
+| `MEGARAC_DAEMON_IDLE` | `10` | Minutes without a call after which the background process exits |
 
 ## Tools
 
@@ -227,9 +234,9 @@ The update only touches the IPMI card, not the motherboard BIOS. The host keeps 
 
 **Both a dry run and a flash restart the card, and the restart ends the stored login sessions.**
 The tools follow the restart without logging in (the card goes down, then comes back) and report
-`bmc_up: true` with `session: "ended by card restart – run asus-ipmi-mcp login <host> again"`.
+`bmc_up: true` with `session: "ended by card restart – run megarac-mcp login <host> again"`.
 Run `login` again before the next call (the server picks up the new tokens). With
-`ASUS_IPMI_PASSWORD` the server logs in again by itself and reports the new version.
+`MEGARAC_PASSWORD` the server logs in again by itself and reports the new version.
 
 ## Typical agent loop
 
@@ -248,10 +255,10 @@ For CI, scripts and agents that cannot load MCP servers. Same credentials (`logi
 server.
 
 ```bash
-asus-ipmi-mcp tools                                   # list tools
-asus-ipmi-mcp call <host> system_info
-asus-ipmi-mcp call <host> screenshot '{"region":{"x":0,"y":80,"width":600,"height":200}}' --out shot.png
-asus-ipmi-mcp run <host> steps.json --out-dir shots/  # several steps in ONE session
+megarac-mcp tools                                   # list tools
+megarac-mcp call <host> system_info
+megarac-mcp call <host> screenshot '{"region":{"x":0,"y":80,"width":600,"height":200}}' --out shot.png
+megarac-mcp run <host> steps.json --out-dir shots/  # several steps in ONE session
 ```
 
 `steps.json` is a list of `{"tool", "args", "id"?}`. All steps run in one process, so the KVM
@@ -274,13 +281,13 @@ from one `call` is valid in the next, and the keyboard wait of HID power-save mo
 While it runs it holds KVM control (see below).
 
 ```bash
-asus-ipmi-mcp daemon <host> status     # running?
-asus-ipmi-mcp daemon <host> stop       # end it now, free the KVM session
-asus-ipmi-mcp call <host> screenshot --no-daemon   # everything in this process, as before
+megarac-mcp daemon <host> status     # running?
+megarac-mcp daemon <host> stop       # end it now, free the KVM session
+megarac-mcp call <host> screenshot --no-daemon   # everything in this process, as before
 ```
 
-Its log is `~/.local/state/asus-ipmi-mcp/<host>.daemon.log`; tool logs (KVM connect, waits) go
-there, not to the `call`'s stderr. With `ASUS_IPMI_PASSWORD` set there is no background process.
+Its log is `~/.local/state/megarac-mcp/<host>.daemon.log`; tool logs (KVM connect, waits) go
+there, not to the `call`'s stderr. With `MEGARAC_PASSWORD` set there is no background process.
 
 stdout gets one JSON line per step (`{step, tool, ok, result, images}`), images go to files (path
 printed, never base64), and logs go to stderr. Exit code 1 if a step failed (later steps are skipped
@@ -292,7 +299,7 @@ unless `--keep-going`), 2 on usage errors.
   protocol (the same as the card's HTML5 viewer).
 - Video is ASPEED's compressed format. It is decoded with **AMI's own decoder**, which this package
   does **not** ship: on first use it is downloaded from *your* card
-  (`/libs/kvm/ast/decode_worker.js`) and cached in `~/.cache/asus-ipmi-mcp/` (per card + firmware).
+  (`/libs/kvm/ast/decode_worker.js`) and cached in `~/.cache/megarac-mcp/` (per card + firmware).
 - Keyboard and mouse are sent as USB HID reports through the same connection; the card presents
   itself to the host as a USB keyboard and absolute mouse.
 - Power, sensors and boot override use the card's Redfish API.
@@ -303,7 +310,7 @@ unless `--keep-going`), 2 on usage errors.
   MegaRAC 13.70.15) attach their virtual keyboard and mouse to the host only when the first KVM
   session starts. The host needs several seconds to detect them, and input sent earlier is lost
   without an error (the host's kernel log shows `usb ...: device not accepting address, error -71`
-  meanwhile, which is harmless). The tools detect this mode and wait `ASUS_IPMI_HID_WAIT` seconds
+  meanwhile, which is harmless). The tools detect this mode and wait `MEGARAC_HID_WAIT` seconds
   before the first input of such a session; `kvm_status` shows `hid_power_save`.
 - **One controlling KVM session per card.** Using the tools takes control from an open browser
   viewer (the viewer gets a "Permission Requested" prompt and loses control after ~30 s). If the
@@ -332,7 +339,7 @@ unless `--keep-going`), 2 on usage errors.
 This server can type passwords, power-cycle machines, boot installers and flash firmware. It's
 physical access over the network.
 
-- **Use `login`, not `ASUS_IPMI_PASSWORD`.** The card password stays out of the MCP config, the
+- **Use `login`, not `MEGARAC_PASSWORD`.** The card password stays out of the MCP config, the
   environment and the agent's reach; only expiring session tokens are stored (mode 600). `logout`
   ends the sessions right away.
 - All tools are available to whoever holds the session; protect the token file (mode 600) and
@@ -345,8 +352,8 @@ physical access over the network.
 ```bash
 npm install
 npm test                                                # unit tests against a fake card, no hardware
-node bin/asus-ipmi-mcp.js login <card address>          # once
-ASUS_IPMI_HOST=<card address> npm run smoke             # read-only tools + one screenshot
+node bin/megarac-mcp.js login <card address>          # once
+MEGARAC_HOST=<card address> npm run smoke             # read-only tools + one screenshot
 ```
 
 Protocol notes are in the source headers (`src/kvm.js`, `src/media.js`).

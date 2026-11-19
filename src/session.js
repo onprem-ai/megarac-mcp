@@ -1,4 +1,4 @@
-// Password-free operation: `asus-ipmi-mcp login <host>` asks for the password once (hidden
+// Password-free operation: `megarac-mcp login <host>` asks for the password once (hidden
 // prompt on the terminal), opens a web session and a Redfish session on the card, and stores
 // only those session tokens in a file readable by the user alone. The MCP server then runs
 // on the tokens; the password is never stored, logged, passed on the command line or put in
@@ -8,11 +8,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { Agent, fetch } from 'undici';
 import { isPasswordChangeRequired, passwordChangeMessage } from './bmc.js';
+import './env.js';
 
-export function sessionFile(host, file = process.env.ASUS_IPMI_SESSION_FILE) {
+/** forWrite: always the current location (a new login does not write into the old folder). */
+export function sessionFile(host, file = process.env.MEGARAC_SESSION_FILE, forWrite = false) {
   if (file) return file;
   const base = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
-  return path.join(base, 'asus-ipmi-mcp', `${host}.json`);
+  const f = path.join(base, 'megarac-mcp', `${host}.json`);
+  // Tokens stored before the rename (asus-ipmi-mcp) stay valid: use them until a new login.
+  const old = path.join(base, 'asus-ipmi-mcp', `${host}.json`);
+  return !forWrite && !fs.existsSync(f) && fs.existsSync(old) ? old : f;
 }
 
 export function loadSession(host, file) {
@@ -24,10 +29,12 @@ export function loadSession(host, file) {
 }
 
 function saveSession(host, data, file) {
-  const f = sessionFile(host, file);
+  const before = sessionFile(host, file);
+  const f = sessionFile(host, file, true);
   fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
   fs.writeFileSync(f, JSON.stringify(data, null, 2), { mode: 0o600 });
   fs.chmodSync(f, 0o600);
+  if (before !== f) fs.rmSync(before, { force: true }); // tokens from before the rename: replaced
   return f;
 }
 
@@ -85,7 +92,7 @@ async function deleteSessions({ origin, dispatcher, web, redfish }) {
 }
 
 export async function login({ host, user = 'admin', file, origin = null, readPassword = promptHidden }) {
-  if (!host) throw new Error('usage: asus-ipmi-mcp login <host> [--user <user>]');
+  if (!host) throw new Error('usage: megarac-mcp login <host> [--user <user>]');
   origin = origin || `https://${host}`;
   const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
   let password = await readPassword(`Password for ${user}@${host} (not stored): `);
@@ -126,7 +133,7 @@ export async function login({ host, user = 'admin', file, origin = null, readPas
     for (const p of check.problems) process.stderr.write(`warning: ${p.warn}\n`);
 
     const f = saveSession(host, { host, user, created: new Date().toISOString(), web, redfish }, file);
-    process.stderr.write(`Sessions stored in ${f} (mode 600, no password). They expire on the card after inactivity, and a card restart ends them; end them now with: asus-ipmi-mcp logout ${host}\n`);
+    process.stderr.write(`Sessions stored in ${f} (mode 600, no password). They expire on the card after inactivity, and a card restart ends them; end them now with: megarac-mcp logout ${host}\n`);
     return { file: f, warnings: check.problems.map((p) => p.warn) };
   } finally {
     password = null;
@@ -134,7 +141,7 @@ export async function login({ host, user = 'admin', file, origin = null, readPas
 }
 
 export async function logout({ host, file }) {
-  if (!host) throw new Error('usage: asus-ipmi-mcp logout <host>');
+  if (!host) throw new Error('usage: megarac-mcp logout <host>');
   const f = sessionFile(host, file);
   const s = loadSession(host, file);
   if (!s) { process.stderr.write(`no session file ${f}\n`); return; }

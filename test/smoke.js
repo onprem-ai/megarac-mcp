@@ -1,5 +1,5 @@
 // Smoke test: start the server over stdio like an MCP client would, call read-only tools.
-// Usage: node bin/asus-ipmi-mcp.js login <host>; then ASUS_IPMI_HOST=<host> node test/smoke.js [outdir]
+// Usage: node bin/megarac-mcp.js login <host>; then MEGARAC_HOST=<host> node test/smoke.js [outdir]
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const out = process.argv[2] || '/tmp';
 const transport = new StdioClientTransport({
-  command: process.execPath, args: [path.join(root, 'bin/asus-ipmi-mcp.js')],
+  command: process.execPath, args: [path.join(root, 'bin/megarac-mcp.js')],
   env: { ...process.env }, stderr: 'inherit',
 });
 const client = new Client({ name: 'smoke', version: '0' });

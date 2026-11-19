@@ -1,6 +1,6 @@
 // HTTP access to the BMC: AMI MegaRAC web API (session + CSRF) and Redfish.
-// Two ways to authenticate: a password (ASUS_IPMI_PASSWORD), or session tokens made by
-// `asus-ipmi-mcp login` (src/session.js), in which case no password is ever held here.
+// Two ways to authenticate: a password (MEGARAC_PASSWORD), or session tokens made by
+// `megarac-mcp login` (src/session.js), in which case no password is ever held here.
 import { Agent, fetch } from 'undici';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -11,19 +11,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PASSWORD_CHANGE = /Password should be changed|PasswordChangeRequired|must be changed before access/i;
 export const isPasswordChangeRequired = (text) => PASSWORD_CHANGE.test(String(text || ''));
 export const passwordChangeMessage = (user, host) =>
-  `the card requires a new password for ${user} (default password still set). Change it in the card's web UI (https://${host}), then run "asus-ipmi-mcp login ${host}" again`;
+  `the card requires a new password for ${user} (default password still set). Change it in the card's web UI (https://${host}), then run "megarac-mcp login ${host}" again`;
 
 export class Bmc {
   /**
-   * session: tokens from `asus-ipmi-mcp login`.
+   * session: tokens from `megarac-mcp login`.
    * reloadSession: () => fresh session object or null (re-reads the token file), so a new `login`
    *   in a terminal takes effect without restarting the server.
    * sessionPath: path of the token file (only for messages).
    * origin: base URL override (tests); default https://<host>.
    */
   constructor({ host, user, password, session = null, reloadSession = null, sessionPath = null, insecure = true, origin = null }) {
-    if (!host) throw new Error('BMC host not set (ASUS_IPMI_HOST)');
-    if (!password && !session) throw new Error(`no credentials: run "asus-ipmi-mcp login ${host}" or set ASUS_IPMI_PASSWORD${sessionPath ? ` (looked for ${sessionPath})` : ''}`);
+    if (!host) throw new Error('BMC host not set (MEGARAC_HOST)');
+    if (!password && !session) throw new Error(`no credentials: run "megarac-mcp login ${host}" or set MEGARAC_PASSWORD${sessionPath ? ` (looked for ${sessionPath})` : ''}`);
     this.host = host;
     this.origin = origin || `https://${host}`;
     this.user = (session && session.user) || user || 'admin';
@@ -58,7 +58,7 @@ export class Bmc {
   /** Mark the stored tokens as dead (the card restarted). */
   endSession(reason) { if (this.tokenMode) this.sessionEnded = reason; }
 
-  reloginHint() { return `run "asus-ipmi-mcp login ${this.host}" again`; }
+  reloginHint() { return `run "megarac-mcp login ${this.host}" again`; }
 
   sessionExpired(what) {
     const why = this.sessionEnded ? `the stored session was ended (${this.sessionEnded})` : 'the stored session has expired or was ended';
@@ -156,7 +156,7 @@ export class Bmc {
   }
 
   async logout() {
-    if (this.tokenMode) return; // token mode: sessions are ended with `asus-ipmi-mcp logout`
+    if (this.tokenMode) return; // token mode: sessions are ended with `megarac-mcp logout`
     if (!this.csrf) return;
     try {
       await fetch(this.url('/api/session'), { method: 'DELETE', dispatcher: this.dispatcher, headers: { 'X-CSRFTOKEN': this.csrf, cookie: this.cookie } });

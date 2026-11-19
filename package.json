@@ -1,10 +1,11 @@
 {
-  "name": "asus-ipmi-mcp",
+  "name": "megarac-mcp",
   "version": "0.2.0",
-  "description": "MCP server to control an ASUS IPMI Expansion Card (AMI MegaRAC / ASPEED AST2600): screen, mouse, keyboard, power, sensors, virtual media \u2014 no browser needed.",
+  "description": "MCP server and CLI for servers with an AMI MegaRAC BMC (ASUS IPMI Expansion Card, Gigabyte, ...; ASPEED AST2600): screen, mouse, keyboard, power, sensors, virtual media — no browser needed.",
   "type": "module",
   "bin": {
-    "asus-ipmi-mcp": "bin/asus-ipmi-mcp.js"
+    "megarac-mcp": "bin/megarac-mcp.js",
+    "asus-ipmi-mcp": "bin/megarac-mcp.js"
   },
   "main": "src/server.js",
   "files": [
@@ -19,7 +20,7 @@
     "node": ">=22.19"
   },
   "scripts": {
-    "start": "node bin/asus-ipmi-mcp.js",
+    "start": "node bin/megarac-mcp.js",
     "test": "node --test test/unit.test.js",
     "smoke": "node test/smoke.js"
   },
@@ -34,7 +35,8 @@
     "megarac",
     "aspeed",
     "ast2600",
-    "redfish"
+    "redfish",
+    "gigabyte"
   ],
   "license": "MIT",
   "dependencies": {
@@ -48,10 +50,10 @@
   "author": "Tomas Polach <tomas@polach.ch>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/onprem-ai/asus-ipmi-mcp.git"
+    "url": "git+https://github.com/onprem-ai/megarac-mcp.git"
   },
-  "homepage": "https://github.com/onprem-ai/asus-ipmi-mcp#readme",
+  "homepage": "https://github.com/onprem-ai/megarac-mcp#readme",
   "bugs": {
-    "url": "https://github.com/onprem-ai/asus-ipmi-mcp/issues"
+    "url": "https://github.com/onprem-ai/megarac-mcp/issues"
   }
 }

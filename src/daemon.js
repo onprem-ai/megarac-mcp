@@ -6,11 +6,11 @@
 // new first session costs the keyboard wait again. With the daemon the session stays open, and
 // screen_ids from one `call` are still valid in the next.
 //
-//   asus-ipmi-mcp daemon <host>          run in the foreground (what `call` starts on demand)
-//   asus-ipmi-mcp daemon <host> status   is one running?
-//   asus-ipmi-mcp daemon <host> stop     end it (closes the KVM session)
+//   megarac-mcp daemon <host>          run in the foreground (what `call` starts on demand)
+//   megarac-mcp daemon <host> status   is one running?
+//   megarac-mcp daemon <host> stop     end it (closes the KVM session)
 //
-// It exits by itself after ASUS_IPMI_DAEMON_IDLE minutes without a call (default 10), so the KVM
+// It exits by itself after MEGARAC_DAEMON_IDLE minutes without a call (default 10), so the KVM
 // control is free again for the browser viewer. Protocol: HTTP on the socket, JSON bodies:
 //   GET /status -> {version, host, pid, busy}
 //   POST /call {tool, args} -> the tool's MCP result ({content, isError})
@@ -32,7 +32,7 @@ export const socketPath = (host) => path.join(stateDir(host), `${host}.sock`);
 export const logPath = (host) => path.join(stateDir(host), `${host}.daemon.log`);
 
 /** Run the daemon for one card. Returns { listening, finished, shutdown }. */
-export function serve({ host, env = process.env, bmc = null, idleMs = Math.max(0.1, +(env.ASUS_IPMI_DAEMON_IDLE ?? 10)) * 60000, log = (m) => process.stderr.write(`[asus-ipmi-mcp ${new Date().toISOString()}] ${m}\n`) }) {
+export function serve({ host, env = process.env, bmc = null, idleMs = Math.max(0.1, +(env.MEGARAC_DAEMON_IDLE ?? 10)) * 60000, log = (m) => process.stderr.write(`[megarac-mcp ${new Date().toISOString()}] ${m}\n`) }) {
   const { tools, close } = createTools({ bmc: bmc || bmcFromEnv(host, env), flags: flagsFromEnv(env), log });
   const byName = new Map(tools.map((t) => [t.name, t]));
   const sock = socketPath(host);
@@ -105,7 +105,7 @@ export async function ensureDaemon(host, { env = process.env } = {}) {
   bmcFromEnv(host, env);                         // no credentials: fail here, with the usual message
   fs.mkdirSync(stateDir(host), { recursive: true, mode: 0o700 });
   const logFd = fs.openSync(logPath(host), 'a', 0o600);
-  const bin = fileURLToPath(new URL('../bin/asus-ipmi-mcp.js', import.meta.url));
+  const bin = fileURLToPath(new URL('../bin/megarac-mcp.js', import.meta.url));
   spawn(process.execPath, [bin, 'daemon', host], { detached: true, stdio: ['ignore', logFd, logFd], env }).unref();
   fs.closeSync(logFd);
   for (let i = 0; i < 100; i++) { await sleep(100); if ((st = await status(host))) return st; }
