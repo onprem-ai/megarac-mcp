@@ -237,7 +237,7 @@ for (const [name, powerSave, status, waits] of [['first session waits', true, 2,
       powerSave,
       kvm: (ws) => { ws.send(ivtp(CMD.CONNECTION_ALLOWED)); ws.once('message', () => ws.send(ivtp(CMD.VALIDATED_VIDEO_SESSION, status, Buffer.from([1])))); },
     });
-    process.env.ASUS_IPMI_HID_WAIT = '0.4';
+    process.env.MEGARAC_HID_WAIT = '0.4';
     const k = kvmFor(fake, new Bmc({ host: 'card', password: 'pw', origin: fake.origin }));
     try {
       await k.ensure();
@@ -245,7 +245,7 @@ for (const [name, powerSave, status, waits] of [['first session waits', true, 2,
       await k.inputReady();
       const waited = Date.now() - t0;
       if (waits) assert.ok(waited >= 300, `waited ${waited} ms`); else assert.ok(waited < 100, `waited ${waited} ms`);
-    } finally { delete process.env.ASUS_IPMI_HID_WAIT; k.close(); await fake.close(); }
+    } finally { delete process.env.MEGARAC_HID_WAIT; k.close(); await fake.close(); }
   });
 }
 

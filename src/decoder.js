@@ -13,7 +13,7 @@ const DECODER_PATH = '/libs/kvm/ast/decode_worker.js';
 
 function cacheDir() {
   const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
-  for (const d of [path.join(base, 'asus-ipmi-mcp'), path.join(os.tmpdir(), 'asus-ipmi-mcp')]) {
+  for (const d of [path.join(base, 'megarac-mcp'), path.join(os.tmpdir(), 'megarac-mcp')]) {
     try { fs.mkdirSync(d, { recursive: true }); fs.accessSync(d, fs.constants.W_OK); return d; } catch { /* try next */ }
   }
   return os.tmpdir();
@@ -41,7 +41,7 @@ export class AstDecoder {
       addEventListener: (type, fn) => { if (type === 'message') listeners.push(fn); },
       postMessage: (msg) => {
         if (msg.cmd === 'draw' && this._onDraw) this._onDraw(msg.ibuf);
-        else if (msg.cmd === 'exception') process.stderr.write(`[asus-ipmi-mcp] decoder exception: ${msg.ex}\n`);
+        else if (msg.cmd === 'exception') process.stderr.write(`[megarac-mcp] decoder exception: ${msg.ex}\n`);
       },
     };
     const ctx = {

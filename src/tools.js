@@ -11,26 +11,29 @@ import { systemInfo, sensors, power, setBootOnce, POWER_ACTIONS } from './redfis
 import { mediaStatus, configureShare, listImages, startImage, stopImage } from './media.js';
 import { checkUpdate, prepareImage, flashImage, waitForBmc, resetBmc } from './firmware.js';
 import { loadSession, sessionFile } from './session.js';
+import { withOldNames } from './env.js';
 
 export const VERSION = '0.2.0';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Settings from the environment. All tools are always available: the login session is the access control. */
 export function flagsFromEnv(env = process.env) {
-  return { maxSide: +(env.ASUS_IPMI_SCREENSHOT_MAX || 1024) };
+  withOldNames(env);
+  return { maxSide: +(env.MEGARAC_SCREENSHOT_MAX || 1024) };
 }
 
 /** Bmc for a host from the environment: password, or tokens from `login` (re-read when they change). */
 export function bmcFromEnv(host, env = process.env) {
+  withOldNames(env);
   const sessionPath = sessionFile(host);
-  const session = env.ASUS_IPMI_PASSWORD ? null : loadSession(host);
-  if (!env.ASUS_IPMI_PASSWORD && !session) {
-    throw new Error(`No credentials for ${host}: no session file at ${sessionPath}. Run once in a terminal: asus-ipmi-mcp login ${host} ` +
-      '(asks for the password, stores only session tokens), or set ASUS_IPMI_PASSWORD. If login was run, check that XDG_STATE_HOME / ASUS_IPMI_SESSION_FILE are the same here.');
+  const session = env.MEGARAC_PASSWORD ? null : loadSession(host);
+  if (!env.MEGARAC_PASSWORD && !session) {
+    throw new Error(`No credentials for ${host}: no session file at ${sessionPath}. Run once in a terminal: megarac-mcp login ${host} ` +
+      '(asks for the password, stores only session tokens), or set MEGARAC_PASSWORD. If login was run, check that XDG_STATE_HOME / MEGARAC_SESSION_FILE are the same here.');
   }
   return new Bmc({
-    host, user: env.ASUS_IPMI_USER || 'admin', password: env.ASUS_IPMI_PASSWORD, session, sessionPath,
-    reloadSession: env.ASUS_IPMI_PASSWORD ? null : () => loadSession(host),
+    host, user: env.MEGARAC_USER || 'admin', password: env.MEGARAC_PASSWORD, session, sessionPath,
+    reloadSession: env.MEGARAC_PASSWORD ? null : () => loadSession(host),
   });
 }
 
@@ -402,12 +405,12 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
   // ---------------- BMC firmware ----------------
   add('firmware_check_update', {
     title: 'Check for IPMI card firmware updates',
-    description: 'Compares the card firmware with the releases on the ASUS support page (version, date, SHA-256).',
+    description: 'ASUS IPMI Expansion Card only. Compares the card firmware with the releases on the ASUS support page (version, date, SHA-256).',
     inputSchema: {},
   }, async () => text(await checkUpdate(bmc)));
 
   const restartNote = bmc.tokenMode
-    ? ' The card restart ends the stored login session: run "asus-ipmi-mcp login <host>" again afterwards (the server picks up the new tokens by itself).'
+    ? ' The card restart ends the stored login session: run "megarac-mcp login <host>" again afterwards (the server picks up the new tokens by itself).'
     : '';
 
   {

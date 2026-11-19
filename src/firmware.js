@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function workDir() {
   const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
-  for (const d of [path.join(base, 'asus-ipmi-mcp', 'firmware'), path.join(os.tmpdir(), 'asus-ipmi-mcp', 'firmware')]) {
+  for (const d of [path.join(base, 'megarac-mcp', 'firmware'), path.join(os.tmpdir(), 'megarac-mcp', 'firmware')]) {
     try { fs.mkdirSync(d, { recursive: true }); fs.accessSync(d, fs.constants.W_OK); return d; } catch { /* next */ }
   }
   throw new Error('no writable cache directory');
@@ -294,7 +294,7 @@ async function restartResult(bmc, w, onProgress) {
   bmc.csrf = null;
   if (bmc.tokenMode) {
     bmc.endSession('card restart');
-    return { recovered: true, ...base, session: `ended by card restart – run "asus-ipmi-mcp login ${bmc.host}" again (the server picks the new tokens up without a restart)` };
+    return { recovered: true, ...base, session: `ended by card restart – run "megarac-mcp login ${bmc.host}" again (the server picks the new tokens up without a restart)` };
   }
   for (let i = 0; i < 6; i++) {
     try { await bmc.login(); return { recovered: true, ...base, firmware: await currentFirmware(bmc) }; } catch (e) {

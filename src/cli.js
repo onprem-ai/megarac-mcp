@@ -1,15 +1,15 @@
 // Command-line mode: call tools without an MCP client (CI, scripts, agents without MCP support).
 //
-//   asus-ipmi-mcp tools                                   list tools
-//   asus-ipmi-mcp call <host> <tool> ['<json args>'] [--out file]
-//   asus-ipmi-mcp run  <host> <steps.json|-> [--out-dir dir] [--keep-going]
+//   megarac-mcp tools                                   list tools
+//   megarac-mcp call <host> <tool> ['<json args>'] [--out file]
+//   megarac-mcp run  <host> <steps.json|-> [--out-dir dir] [--keep-going]
 //
-//   asus-ipmi-mcp daemon <host> [status|stop]             the background process behind call/run
+//   megarac-mcp daemon <host> [status|stop]             the background process behind call/run
 //
-// Same credentials (login tokens or ASUS_IPMI_PASSWORD) as the server.
+// Same credentials (login tokens or MEGARAC_PASSWORD) as the server.
 // With login tokens, `call` and `run` go through a background process per card (src/daemon.js)
 // that keeps the KVM session open between invocations; it is started on demand and exits when
-// idle. --no-daemon (or ASUS_IPMI_DAEMON=0, or password mode) runs everything in this process.
+// idle. --no-daemon (or MEGARAC_DAEMON=0, or password mode) runs everything in this process.
 // `run` executes all steps in ONE process, so the KVM connection, screen_ids and the
 // firmware confirm_token carry over. Step args may reference earlier results:
 //   "$prev.confirm_token"   field of the previous step's JSON result
@@ -22,10 +22,10 @@ import path from 'node:path';
 import { createTools, flagsFromEnv, bmcFromEnv } from './tools.js';
 
 const usage = `usage:
-  asus-ipmi-mcp tools
-  asus-ipmi-mcp call <host> <tool> ['<json args>'] [--out <file>] [--no-daemon]
-  asus-ipmi-mcp run  <host> <steps.json | -> [--out-dir <dir>] [--keep-going] [--no-daemon]
-  asus-ipmi-mcp daemon <host> [status | stop]
+  megarac-mcp tools
+  megarac-mcp call <host> <tool> ['<json args>'] [--out <file>] [--no-daemon]
+  megarac-mcp run  <host> <steps.json | -> [--out-dir <dir>] [--keep-going] [--no-daemon]
+  megarac-mcp daemon <host> [status | stop]
 steps.json: [{"tool": "screenshot", "args": {...}, "id": "optional"}, ...]; args may use "$prev.<field>" / "$steps.<n|id>.<field>".
 Images are written to files (default: current directory), never printed as base64.`;
 
@@ -96,13 +96,13 @@ async function validateArgs(tool, args) {
 /** Validate the args and run one tool of a tool set. Returns the MCP result. */
 export async function callTool(byName, name, args) {
   const tool = byName.get(name);
-  if (!tool) throw new Error(`unknown tool "${name}" (list them with: asus-ipmi-mcp tools)`);
+  if (!tool) throw new Error(`unknown tool "${name}" (list them with: megarac-mcp tools)`);
   return tool.handler(await validateArgs(tool, args));
 }
 
 /** remote: async (tool, args) => MCP result, to run the steps in the daemon instead of here. */
 export async function runSteps({ host, steps, outDir, out, keepGoing = false, write = (o) => process.stdout.write(JSON.stringify(o) + '\n'), env = process.env, bmc = null, log, remote = null }) {
-  const local = remote ? null : createTools({ bmc: bmc || bmcFromEnv(host, env), flags: flagsFromEnv(env), log: log || ((m) => process.stderr.write(`[asus-ipmi-mcp] ${m}\n`)) });
+  const local = remote ? null : createTools({ bmc: bmc || bmcFromEnv(host, env), flags: flagsFromEnv(env), log: log || ((m) => process.stderr.write(`[megarac-mcp] ${m}\n`)) });
   const byName = local && new Map(local.tools.map((t) => [t.name, t]));
   const results = [];
   let failed = 0;
@@ -171,7 +171,7 @@ export async function cli(argv) {
       if (!Array.isArray(steps)) throw new UsageError('steps file must contain a JSON array');
     } else throw new UsageError(`unknown command ${cmd}`);
     let remote = null;
-    if (!noDaemon && !process.env.ASUS_IPMI_PASSWORD && process.env.ASUS_IPMI_DAEMON !== '0') {
+    if (!noDaemon && !process.env.MEGARAC_PASSWORD && process.env.MEGARAC_DAEMON !== '0') {
       const d = await import('./daemon.js');
       await d.ensureDaemon(host);
       remote = (tool, args) => d.request(host, 'POST', '/call', { tool, args });
@@ -180,7 +180,7 @@ export async function cli(argv) {
     return failed ? 1 : 0;
   } catch (e) {
     if (e instanceof UsageError) { process.stderr.write(`${e.message}\n${usage}\n`); return 2; }
-    process.stderr.write(`[asus-ipmi-mcp] ${e.message}\n`);
+    process.stderr.write(`[megarac-mcp] ${e.message}\n`);
     return 1;
   }
 }

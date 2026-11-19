@@ -2,19 +2,23 @@
 
 ## 0.2.0 – unreleased
 
+- **Renamed to `megarac-mcp`** (was `asus-ipmi-mcp`): the tool works on AMI MegaRAC BMCs in
+  general. Variables are now `MEGARAC_*`, the state folder `~/.local/state/megarac-mcp`. The old
+  command name, `ASUS_IPMI_*` variables, stored tokens and repository URL keep working.
+
 - **Fix: typed text was lost on BMCs in HID power-save mode** (Gigabyte G494-ZB4, AMI MegaRAC
   13.70.15). The BMC attaches its virtual keyboard only when the first KVM session starts; keys
   sent before the host detected it vanished without an error. The KVM session now waits
-  (`ASUS_IPMI_HID_WAIT`, default 15 s) before the first input of such a session.
+  (`MEGARAC_HID_WAIT`, default 15 s) before the first input of such a session.
 - **`call` and `run` use a background process per card** that keeps the KVM session open between
   invocations (started on demand, exits after 10 idle minutes; `daemon <host> status|stop`,
-  `--no-daemon`, `ASUS_IPMI_DAEMON=0`). Later calls take about a second, not a new session each.
+  `--no-daemon`, `MEGARAC_DAEMON=0`). Later calls take about a second, not a new session each.
 - **KVM connect is retried** (3 tries) when the card does not complete the websocket upgrade,
   which it does for some seconds after a session closed.
 
 Fixes and features from a fleet session (four cards, firmware 1.1.35 → 1.3.13).
 
-- **Removed the `ASUS_IPMI_ALLOW_POWER` / `_MEDIA` / `_FIRMWARE` flags.** All tools (power, boot
+- **Removed the `MEGARAC_ALLOW_POWER` / `_MEDIA` / `_FIRMWARE` flags.** All tools (power, boot
   override, virtual media, firmware, `bmc_reset`) are always available; the login session is the
   access control. Existing configs that set these variables keep working (they are ignored).
 
@@ -50,8 +54,8 @@ First public version.
 - Tools: `screenshot`, `wait_for_screen_change`, `click`, `move_mouse`, `drag`, `scroll`,
   `type_text`, `press_keys`, `kvm_status`, `system_info`, `sensors`, `media_status`,
   `firmware_check_update`
-- Opt-in tools: `power`, `set_boot_once` (`ASUS_IPMI_ALLOW_POWER`), virtual media
-  (`ASUS_IPMI_ALLOW_MEDIA`), `firmware_prepare` / `firmware_flash` (`ASUS_IPMI_ALLOW_FIRMWARE`)
+- Opt-in tools: `power`, `set_boot_once` (`MEGARAC_ALLOW_POWER`), virtual media
+  (`MEGARAC_ALLOW_MEDIA`), `firmware_prepare` / `firmware_flash` (`MEGARAC_ALLOW_FIRMWARE`)
 - `login` / `logout` commands: password asked once at a hidden prompt, only session tokens
-  stored (mode 600); the server runs on them without `ASUS_IPMI_PASSWORD`
+  stored (mode 600); the server runs on them without `MEGARAC_PASSWORD`
 - Tested on ASUS IPMI Expansion Card-SI, BMC firmware 1.3.13, ProArt X870E-CREATOR WIFI

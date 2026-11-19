@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const t = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/asus-ipmi-mcp.js')], env: { ...process.env }, stderr: 'inherit' });
+const t = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/megarac-mcp.js')], env: { ...process.env }, stderr: 'inherit' });
 const c = new Client({ name: 'unlock', version: '0' });
 await c.connect(t);
 const call = async (name, args = {}) => { const r = await c.callTool({ name, arguments: args }); console.log(name, r.isError ? 'ERROR' : 'ok', r.content.filter(x => x.type === 'text').map(x => x.text.slice(0, 160)).join(' | ')); return r; };

@@ -34,7 +34,7 @@ const VALIDATE_RESULT = { 0: 'invalid session', 1: 'valid', 2: 'insufficient pri
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const STATUS_FIRST_KVM_SESSION = 2;
 /** Seconds the host gets to enumerate the virtual keyboard/mouse in HID power-save mode. */
-const hidAttachMs = () => Math.max(0, +(process.env.ASUS_IPMI_HID_WAIT ?? 15)) * 1000;
+const hidAttachMs = () => Math.max(0, +(process.env.MEGARAC_HID_WAIT ?? 15)) * 1000;
 const CONNECT_TRIES = 3; // the card is slow to accept a new session right after one closed
 
 // KVM_SHARING(32) / SET_NEXT_MASTER(50): status low byte = privilege step, high byte = answer
@@ -56,7 +56,7 @@ const RESPONSE_TEXT = {
 // not a compression problem (the card sends the same with and without a deflate offer).
 const RSV1_HINT = "The card's KVM service is not answering (its web server replied with plain HTTP inside the KVM websocket): the KVM service on the card is stuck. " +
   'The bmc_reset tool restarts the card; the host keeps running. ' +
-  'Afterwards run "asus-ipmi-mcp login <host>" again (the restart ends all card sessions).';
+  'Afterwards run "megarac-mcp login <host>" again (the restart ends all card sessions).';
 
 /** Turn low-level websocket errors into actionable messages. */
 export function explainWsError(msg) {
