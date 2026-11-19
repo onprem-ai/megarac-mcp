@@ -5,6 +5,7 @@
 // asus-ipmi-mcp call <host> <tool> …  call one tool without an MCP client (see src/cli.js)
 // asus-ipmi-mcp run <host> steps.json run several tool calls in one session
 // asus-ipmi-mcp tools                 list the tools
+// asus-ipmi-mcp daemon <host> [status|stop]  background process that keeps the KVM session for call/run
 const [cmd, host, ...rest] = process.argv.slice(2);
 const fatal = (e) => { process.stderr.write(`[asus-ipmi-mcp] ${e.message || e}\n`); process.exit(1); };
 
@@ -13,7 +14,7 @@ if (cmd === 'login' || cmd === 'logout') {
   const user = ui >= 0 ? rest[ui + 1] : (process.env.ASUS_IPMI_USER || 'admin');
   const { login, logout } = await import('../src/session.js');
   (cmd === 'login' ? login({ host, user }) : logout({ host })).catch(fatal);
-} else if (cmd === 'call' || cmd === 'run' || cmd === 'tools') {
+} else if (cmd === 'call' || cmd === 'run' || cmd === 'tools' || cmd === 'daemon') {
   const { cli } = await import('../src/cli.js');
   // Exit explicitly: undici keep-alive sockets would otherwise hold the process open.
   cli(process.argv.slice(2)).then((code) => process.exit(code), fatal);
@@ -25,6 +26,7 @@ if (cmd === 'login' || cmd === 'logout') {
   asus-ipmi-mcp tools                              list tools
   asus-ipmi-mcp call <host> <tool> ['<json>'] [--out <file>]
   asus-ipmi-mcp run <host> <steps.json|-> [--out-dir <dir>] [--keep-going]
+  asus-ipmi-mcp daemon <host> [status|stop]        background process behind call/run (started on demand)
 `);
 } else {
   const { main } = await import('../src/server.js');

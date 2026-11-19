@@ -230,6 +230,53 @@ test('KVM: validates normally', async () => {
   await fake.close();
 });
 
+// HID power-save mode: input must wait after a FIRST session (status 2), not otherwise.
+for (const [name, powerSave, status, waits] of [['first session waits', true, 2, true], ['later session does not wait', true, 0, false], ['off: no wait', false, 2, false]]) {
+  test(`KVM: HID power-save, ${name}`, async () => {
+    const fake = await startFakeBmc({
+      powerSave,
+      kvm: (ws) => { ws.send(ivtp(CMD.CONNECTION_ALLOWED)); ws.once('message', () => ws.send(ivtp(CMD.VALIDATED_VIDEO_SESSION, status, Buffer.from([1])))); },
+    });
+    process.env.ASUS_IPMI_HID_WAIT = '0.4';
+    const k = kvmFor(fake, new Bmc({ host: 'card', password: 'pw', origin: fake.origin }));
+    try {
+      await k.ensure();
+      const t0 = Date.now();
+      await k.inputReady();
+      const waited = Date.now() - t0;
+      if (waits) assert.ok(waited >= 300, `waited ${waited} ms`); else assert.ok(waited < 100, `waited ${waited} ms`);
+    } finally { delete process.env.ASUS_IPMI_HID_WAIT; k.close(); await fake.close(); }
+  });
+}
+
+test('daemon: call goes through the socket, keeps state between runs, stops', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-'));
+  const old = process.env.XDG_STATE_HOME; process.env.XDG_STATE_HOME = dir;
+  const { serve, request, status, socketPath } = await import('../src/daemon.js');
+  const bmc = { host: 'card', tokenMode: true, origin: 'http://x', logout: async () => {}, api: async () => [], login: async () => { throw new Error('no card'); } };
+  const d = serve({ host: 'card', bmc, log: () => {} });
+  try {
+    await d.listening;
+    assert.equal((fs.statSync(socketPath('card')).mode & 0o077), 0, 'socket not accessible to others');
+    assert.equal((await status('card')).host, 'card');
+    const lines = [];
+    const remote = (tool, args) => request('card', 'POST', '/call', { tool, args });
+    const r = await runSteps({ host: 'card', steps: [{ tool: 'kvm_status' }, { tool: 'nope' }], keepGoing: true, write: (l) => lines.push(l), remote });
+    assert.equal(lines[0].ok, true);
+    assert.equal(lines[0].result.connected, false);
+    assert.equal(lines[1].ok, false);
+    assert.match(lines[1].result, /unknown tool "nope"/);
+    assert.equal(r.failed, 1);
+    const bad = await remote('type_text', { nonsense: 1 });
+    assert.equal(bad.isError, true);
+    assert.match(bad.content[0].text, /invalid args/);
+    await request('card', 'POST', '/stop');
+    await d.finished;
+    assert.equal(await status('card'), null);
+    assert.equal(fs.existsSync(socketPath('card')), false);
+  } finally { await d.shutdown('test end'); if (old === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = old; fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 // ---------- 5. then_screenshot / expect_screen ----------
 function fakeScreenTools() {
   const bmc = { host: 'card', tokenMode: true, origin: 'http://x', logout: async () => {}, api: async () => [] };

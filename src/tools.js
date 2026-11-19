@@ -212,7 +212,7 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
       double: z.boolean().optional(),
     },
   }, async ({ x, y, button = 'left', double = false }) => {
-    await kvm.ensure();
+    await kvm.ensure(); await kvm.inputReady();
     const b = BUTTON[button];
     for (let i = 0; i < (double ? 2 : 1); i++) {
       kvm.mouse(x, y, 0); await sleep(50);
@@ -226,14 +226,14 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
     title: 'Move mouse',
     description: 'Moves the pointer to absolute screen coordinates (also wakes a sleeping display).',
     inputSchema: { x: z.number(), y: z.number() },
-  }, async ({ x, y }) => { await kvm.ensure(); kvm.mouse(x, y, 0); return text(`moved to ${x},${y}`); });
+  }, async ({ x, y }) => { await kvm.ensure(); await kvm.inputReady(); kvm.mouse(x, y, 0); return text(`moved to ${x},${y}`); });
 
   add('drag', {
     title: 'Mouse drag',
     description: 'Press left button at (x1,y1), move to (x2,y2), release.',
     inputSchema: { x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number() },
   }, async ({ x1, y1, x2, y2 }) => {
-    await kvm.ensure();
+    await kvm.ensure(); await kvm.inputReady();
     kvm.mouse(x1, y1, 0); await sleep(50); kvm.mouse(x1, y1, 1); await sleep(80);
     for (let i = 1; i <= 10; i++) { kvm.mouse(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10, 1); await sleep(30); }
     kvm.mouse(x2, y2, 0);
@@ -245,7 +245,7 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
     description: 'Scrolls at a position. Positive amount scrolls up, negative down (wheel notches).',
     inputSchema: { x: z.number(), y: z.number(), amount: z.number().int().min(-20).max(20) },
   }, async ({ x, y, amount }) => {
-    await kvm.ensure();
+    await kvm.ensure(); await kvm.inputReady();
     const step = Math.sign(amount);
     for (let i = 0; i < Math.abs(amount); i++) { kvm.mouse(x, y, 0, step); await sleep(40); }
     kvm.mouse(x, y, 0, 0);
@@ -267,7 +267,7 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
   }, async ({ text: t, delay_ms = 30, expect_screen, then_screenshot }) => {
     const bad = [...t].filter((c) => !CHARS[c]);
     if (bad.length) throw new Error(`cannot type characters: ${JSON.stringify([...new Set(bad)].join(''))}`);
-    await kvm.ensure();
+    await kvm.ensure(); await kvm.inputReady();
     const refused = await guard(expect_screen);
     if (refused) return refused;
     const before = copyImage();
@@ -288,7 +288,7 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
     },
   }, async ({ keys, repeat = 1, delay_ms = 120, expect_screen, then_screenshot }) => {
     const parsed = keys.map(parseCombo);
-    await kvm.ensure();
+    await kvm.ensure(); await kvm.inputReady();
     const refused = await guard(expect_screen);
     if (refused) return refused;
     const before = copyImage();
@@ -324,6 +324,8 @@ export function createTools({ bmc, flags = flagsFromEnv(), log = () => {} }) {
       last_frame_age_s: kvm.lastFrameAt ? Math.round((Date.now() - kvm.lastFrameAt) / 1000) : null,
       mouse_mode: { 1: 'relative', 2: 'absolute', 3: 'other' }[kvm.mouseMode] || kvm.mouseMode,
       other_clients: kvm.otherClients,
+      hid_power_save: kvm.powerSave,
+      ...(kvm.hidReadyAt > Date.now() ? { input_ready_in_s: Math.ceil((kvm.hidReadyAt - Date.now()) / 1000) } : {}),
     });
   });
 
