@@ -4,7 +4,12 @@
 //   asus-ipmi-mcp call <host> <tool> ['<json args>'] [--out file]
 //   asus-ipmi-mcp run  <host> <steps.json|-> [--out-dir dir] [--keep-going]
 //
+//   asus-ipmi-mcp daemon <host> [status|stop]             the background process behind call/run
+//
 // Same credentials (login tokens or ASUS_IPMI_PASSWORD) as the server.
+// With login tokens, `call` and `run` go through a background process per card (src/daemon.js)
+// that keeps the KVM session open between invocations; it is started on demand and exits when
+// idle. --no-daemon (or ASUS_IPMI_DAEMON=0, or password mode) runs everything in this process.
 // `run` executes all steps in ONE process, so the KVM connection, screen_ids and the
 // firmware confirm_token carry over. Step args may reference earlier results:
 //   "$prev.confirm_token"   field of the previous step's JSON result
@@ -18,8 +23,9 @@ import { createTools, flagsFromEnv, bmcFromEnv } from './tools.js';
 
 const usage = `usage:
   asus-ipmi-mcp tools
-  asus-ipmi-mcp call <host> <tool> ['<json args>'] [--out <file>]
-  asus-ipmi-mcp run  <host> <steps.json | -> [--out-dir <dir>] [--keep-going]
+  asus-ipmi-mcp call <host> <tool> ['<json args>'] [--out <file>] [--no-daemon]
+  asus-ipmi-mcp run  <host> <steps.json | -> [--out-dir <dir>] [--keep-going] [--no-daemon]
+  asus-ipmi-mcp daemon <host> [status | stop]
 steps.json: [{"tool": "screenshot", "args": {...}, "id": "optional"}, ...]; args may use "$prev.<field>" / "$steps.<n|id>.<field>".
 Images are written to files (default: current directory), never printed as base64.`;
 
@@ -87,10 +93,17 @@ async function validateArgs(tool, args) {
   return r.data;
 }
 
-export async function runSteps({ host, steps, outDir, out, keepGoing = false, write = (o) => process.stdout.write(JSON.stringify(o) + '\n'), env = process.env, bmc = null, log }) {
-  const flags = flagsFromEnv(env);
-  const { tools, close } = createTools({ bmc: bmc || bmcFromEnv(host, env), flags, log: log || ((m) => process.stderr.write(`[asus-ipmi-mcp] ${m}\n`)) });
-  const byName = new Map(tools.map((t) => [t.name, t]));
+/** Validate the args and run one tool of a tool set. Returns the MCP result. */
+export async function callTool(byName, name, args) {
+  const tool = byName.get(name);
+  if (!tool) throw new Error(`unknown tool "${name}" (list them with: asus-ipmi-mcp tools)`);
+  return tool.handler(await validateArgs(tool, args));
+}
+
+/** remote: async (tool, args) => MCP result, to run the steps in the daemon instead of here. */
+export async function runSteps({ host, steps, outDir, out, keepGoing = false, write = (o) => process.stdout.write(JSON.stringify(o) + '\n'), env = process.env, bmc = null, log, remote = null }) {
+  const local = remote ? null : createTools({ bmc: bmc || bmcFromEnv(host, env), flags: flagsFromEnv(env), log: log || ((m) => process.stderr.write(`[asus-ipmi-mcp] ${m}\n`)) });
+  const byName = local && new Map(local.tools.map((t) => [t.name, t]));
   const results = [];
   let failed = 0;
   try {
@@ -100,10 +113,8 @@ export async function runSteps({ host, steps, outDir, out, keepGoing = false, wr
       let line;
       try {
         if (!s || typeof s.tool !== 'string') throw new Error('step needs {"tool": "<name>", "args": {...}}');
-        const tool = byName.get(s.tool);
-        if (!tool) throw new Error(`unknown tool "${s.tool}" (list them with: asus-ipmi-mcp tools)`);
-        const args = await validateArgs(tool, resolveRefs(s.args || {}, results));
-        const res = await tool.handler(args);
+        const args = resolveRefs(s.args || {}, results);
+        const res = remote ? await remote(s.tool, args) : await callTool(byName, s.tool, args);
         const m = materialize(res, { out: steps.length === 1 ? out : null, outDir, prefix: `step${String(stepNo).padStart(2, '0')}-${s.tool}` });
         line = { step: stepNo, ...(s.id ? { id: s.id } : {}), tool: s.tool, ...m };
       } catch (e) {
@@ -114,7 +125,7 @@ export async function runSteps({ host, steps, outDir, out, keepGoing = false, wr
       if (!line.ok) { failed++; if (!keepGoing) break; }
     }
   } finally {
-    await close();
+    if (local) await local.close();
   }
   return { failed, results };
 }
@@ -133,8 +144,18 @@ export async function cli(argv) {
     const out = opt(argv, '--out');
     const outDir = opt(argv, '--out-dir');
     const keepGoing = flag(argv, '--keep-going');
+    const noDaemon = flag(argv, '--no-daemon');
     const [host, a, b, ...extra] = argv;
     if (!host) throw new UsageError('host missing');
+    if (cmd === 'daemon') {
+      const d = await import('./daemon.js');
+      if (a === 'status') { const st = await d.status(host); process.stdout.write(JSON.stringify(st || { running: false }) + '\n'); return 0; }
+      if (a === 'stop') { const st = await d.status(host); if (st) await d.request(host, 'POST', '/stop'); process.stdout.write(st ? 'stopped\n' : 'not running\n'); return 0; }
+      if (a !== undefined) throw new UsageError(`unknown daemon command ${a}`);
+      const s = d.serve({ host });
+      await s.listening; await s.finished;
+      return 0;
+    }
     let steps;
     if (cmd === 'call') {
       if (!a) throw new UsageError('tool missing');
@@ -149,7 +170,13 @@ export async function cli(argv) {
       try { steps = JSON.parse(src); } catch (e) { throw new UsageError(`steps file is not JSON: ${e.message}`); }
       if (!Array.isArray(steps)) throw new UsageError('steps file must contain a JSON array');
     } else throw new UsageError(`unknown command ${cmd}`);
-    const { failed } = await runSteps({ host, steps, out, outDir, keepGoing });
+    let remote = null;
+    if (!noDaemon && !process.env.ASUS_IPMI_PASSWORD && process.env.ASUS_IPMI_DAEMON !== '0') {
+      const d = await import('./daemon.js');
+      await d.ensureDaemon(host);
+      remote = (tool, args) => d.request(host, 'POST', '/call', { tool, args });
+    }
+    const { failed } = await runSteps({ host, steps, out, outDir, keepGoing, remote });
     return failed ? 1 : 0;
   } catch (e) {
     if (e instanceof UsageError) { process.stderr.write(`${e.message}\n${usage}\n`); return 2; }

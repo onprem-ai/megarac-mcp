@@ -9,6 +9,14 @@
 //   <- ACTIVE_CLIENTS(39)       -> GET_FULL_SCREEN(11,st1)
 //   <- KEEP_ALIVE(57)           -> KEEP_ALIVE(57)
 //   <- VIDEO_PACKETS(25) frames, PAINT_BLANK_SCREEN(9) ~1.6/s while the host display is off
+//
+// HID power-save mode (h5viewercfg power_save_mode = 1; seen on a Gigabyte G494-ZB4, firmware
+// 13.70.15): the BMC attaches its virtual USB keyboard and mouse to the host only when the first
+// KVM session starts (VALIDATED_VIDEO_SESSION status 2 = first session) and detaches them when
+// the last one ends. The host needs several seconds to enumerate them (its kernel log shows
+// "usb ...: device not accepting address, error -71" on the virtual hub meanwhile). Input sent
+// before that is lost without any error; the H5Viewer shows a "HID initializing" notice then.
+// inputReady() waits for it.
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { AstDecoder, loadDecoderSource } from './decoder.js';
@@ -24,6 +32,10 @@ export const CMD = {
 const NAMES = Object.fromEntries(Object.entries(CMD).map(([k, v]) => [v, k]));
 const VALIDATE_RESULT = { 0: 'invalid session', 1: 'valid', 2: 'insufficient privilege (KVM not allowed for this user)', 3: 'invalid session info', 8: 'session unregistered' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const STATUS_FIRST_KVM_SESSION = 2;
+/** Seconds the host gets to enumerate the virtual keyboard/mouse in HID power-save mode. */
+const hidAttachMs = () => Math.max(0, +(process.env.ASUS_IPMI_HID_WAIT ?? 15)) * 1000;
+const CONNECT_TRIES = 3; // the card is slow to accept a new session right after one closed
 
 // KVM_SHARING(32) / SET_NEXT_MASTER(50): status low byte = privilege step, high byte = answer
 // (constants from the card's viewer.min.js).
@@ -90,6 +102,8 @@ export class KvmSession extends EventEmitter {
     this.control = { state: 'unknown', detail: null, other: null, at: null };
     this.lastError = null;
     this.closeReason = null;
+    this.powerSave = false;
+    this.hidReadyAt = 0;
   }
 
   setControl(state, detail, other = this.control.other) {
@@ -109,15 +123,28 @@ export class KvmSession extends EventEmitter {
   }
 
   async _connect() {
-    this.close();
-    this.reset();
-    try {
-      await this._connectInner();
-    } catch (e) {
-      this.lastError = { message: e.message, at: new Date().toISOString() };
+    for (let attempt = 1; ; attempt++) {
       this.close();
-      throw e;
+      this.reset();
+      try {
+        await this._connectInner();
+        return;
+      } catch (e) {
+        this.lastError = { message: e.message, at: new Date().toISOString() };
+        this.close();
+        // Seen on firmware 13.70.15: for some seconds after a session closed the card accepts
+        // the TCP connection but does not complete the websocket upgrade.
+        if (attempt >= CONNECT_TRIES || !/did not open within/.test(e.message)) throw e;
+        this.log(`${e.message}; retrying (${attempt + 1}/${CONNECT_TRIES})`);
+        await sleep(5000);
+      }
     }
+  }
+
+  /** Resolve when keyboard and mouse input will reach the host (see HID power-save mode above). */
+  async inputReady() {
+    const wait = this.hidReadyAt - Date.now();
+    if (wait > 0) { this.log(`HID power-save mode: waiting ${Math.ceil(wait / 1000)} s for the host to detect the virtual keyboard`); await sleep(wait); }
   }
 
   async _connectInner() {
@@ -125,6 +152,7 @@ export class KvmSession extends EventEmitter {
     const cfg = await this.bmc.api('GET', '/api/settings/media/h5viewercfg');
     if (cfg.kvm_service_status === 0) throw new Error('KVM service is disabled on the BMC');
     this.session = { client_ip: cfg.client_ip, session: cfg.session, token: cfg.token, server_ip: cfg.server_ip };
+    this.powerSave = Number(cfg.power_save_mode) === 1;
     if (!this.decoder) {
       let tag = 'unknown';
       try { const m = await this.bmc.redfish('GET', '/redfish/v1/Managers/Self'); tag = normalizeVersion(m.FirmwareVersion) || tag; } catch { /* ignore */ }
@@ -207,6 +235,8 @@ export class KvmSession extends EventEmitter {
       case CMD.CONNECTION_ALLOWED: this.sendValidate(); break;
       case CMD.VALIDATED_VIDEO_SESSION:
         this.validated = p[0] === 1;
+        if (this.validated && this.powerSave && status === STATUS_FIRST_KVM_SESSION) this.hidReadyAt = Date.now() + hidAttachMs();
+        this.log(`KVM validation answer ${p[0]}, status ${status}${this.hidReadyAt ? ' (first session, HID power-save: input delayed)' : ''}`);
         this.emit('validated', p[0]);
         break;
       case CMD.MEDIA_LICENSE_STATUS:
